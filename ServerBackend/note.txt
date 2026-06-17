@@ -1,0 +1,10 @@
+3 đường
+message
+file 
+2 này chung tên file
+
+
+id => mgongle 
+
+khi mà gửi sang python server nó sẽ nhận 1 biến id lưu xong thì cập nhật lên mgongle
+
