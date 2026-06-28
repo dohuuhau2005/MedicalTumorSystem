@@ -1,14 +1,22 @@
 import numpy as np
+import matplotlib.pyplot as plt
 
-# Giả sử sau khi Worker 2 giải mã AES xong, ông lấy được đường dẫn này:
-file_path = "D:\medicalSystem\ServerBackend\src\mri_uploads/123_BrainTumor_1781499991107_2D_ready.npy"
+# 1. Trỏ đến file .npy do AI VỪA TẠO RA
+ai_output_path = r"D:\medicalSystem\ServerBackend\src\mri_uploads\56578_BrainTumor_1782018044624.nii.npy"
 
-# 1. ĐỌC FILE NPY LÊN RAM (Chỉ 1 nốt nhạc)
-slices_2d = np.load(file_path)
+# 2. Đọc file
+ai_images = np.load(ai_output_path)
 
-# 2. Kiểm tra xem nó có đúng hình dáng không
-print("Kích thước cục data:", slices_2d.shape) 
-# Output sẽ ra kiểu: (155, 256, 256, 3) -> Nghĩa là 155 tấm ảnh, kích thước 256x256, 3 kênh màu
+# 3. Lấy lát cắt ở giữa để xem
+slice_idx = len(ai_images) // 2
+img_2d = ai_images[slice_idx]
 
-# 3. TỐNG THẲNG VÀO MỒM CON AI (Vì data đã được chuẩn hóa Z-score sẵn ở Phòng 1 rồi)
-# predictions = model.predict(slices_2d)
+# 4. Hiển thị (Bản thân file .npy này đã được AI tô màu sẵn rồi)
+plt.figure(figsize=(6, 6))
+# Đổi BGR (của OpenCV) sang RGB (của Matplotlib) để màu không bị ngược
+img_rgb = img_2d[:, :, ::-1] 
+
+plt.imshow(img_rgb) 
+plt.title(f"Kết quả AI tô màu - Lát số {slice_idx}", fontsize=14, fontweight='bold')
+plt.axis('off')
+plt.show()

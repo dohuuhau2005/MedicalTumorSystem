@@ -242,40 +242,54 @@ def process_rabbitmq_message(ch, method, properties, body):
         patient_id = decrypt_aes(data['ivPatient'], data['cipherPatient'])
         print(f"\n📥 [Phòng Segmentation] Nhận Job BN: {patient_id} | File npy: {npy_path}")
 
-# --- BƯỚC 2: CHẠY AI ---
-# --- BƯỚC 2: CHẠY AI ---
+# --- BƯỚC 2: CHẠY AI (CHUYÊN GIA PREPROCESS) ---
         import nibabel as nib
         
-        # 1. Đọc file .nii bằng nibabel thay vì np.load
+        # 1. Đọc khối 3D
         nii_img = nib.load(npy_path)
-        img_data = nii_img.get_fdata() 
+        mri_data = nii_img.get_fdata()
         
-        # 2. Xử lý dữ liệu (Giả định: (240, 240, 155) -> (155, 240, 240))
-        # Nếu chiều dọc là trục 2, ta transpose để lấy lát cắt
-        if len(img_data.shape) == 3:
-            slices_3d = np.transpose(img_data, (2, 0, 1))
-        else:
-            slices_3d = img_data
+        # 2. Chuẩn hóa Z-score toàn bộ khối não (Y hệt code cô giáo)
+        mask = mri_data > 0
+        if np.sum(mask) > 0:
+            mean_val = mri_data[mask].mean()
+            std_val = mri_data[mask].std()
+            mri_data = (mri_data - mean_val) / (std_val + 1e-8)
+            mri_data[~mask] = 0.0 # Ép viền ngoài về 0
             
-        # 3. Resize về (256, 256) cho khớp với mô hình
+        # 3. 🚨 BÍ QUYẾT: GỌT VIỀN ĐEN ĐỂ ZOOM NÃO TO LÊN (CROP ROI)
+        padding = 10
+        coords = np.where(mri_data > 0)
+        if len(coords[0]) > 0:
+            x_min, x_max = max(0, coords[0].min() - padding), min(mri_data.shape[0], coords[0].max() + padding)
+            y_min, y_max = max(0, coords[1].min() - padding), min(mri_data.shape[1], coords[1].max() + padding)
+            z_min, z_max = max(0, coords[2].min() - padding), min(mri_data.shape[2], coords[2].max() + padding)
+            cropped_mri = mri_data[x_min:x_max, y_min:y_max, z_min:z_max]
+        else:
+            cropped_mri = mri_data
+            
+        # 4. Thái lát 2D và Resize về chuẩn 256x256 của ResNet50
         resized_slices = []
-        for i in range(len(slices_3d)):
-            img = cv2.resize(slices_3d[i], (256, 256), interpolation=cv2.INTER_LINEAR)
-            resized_slices.append(img)
-        slices_2d = np.array(resized_slices) 
+        # Ở nibabel, mặt cắt ngang (axial) thường là trục Z (trục số 2)
+        for i in range(cropped_mri.shape[2]):
+            slice_2d = cropped_mri[:, :, i]
+            
+            # Bỏ qua mấy lát ở đỉnh sọ toàn màu đen
+            if np.sum(slice_2d > 0) < 10: 
+                continue
+                
+            img_resized = cv2.resize(slice_2d, (256, 256), interpolation=cv2.INTER_LINEAR)
+            resized_slices.append(img_resized)
+            
+        slices_2d = np.array(resized_slices).astype(np.float32)
         
-        # 4. Chuẩn hóa về [0, 1]
-        slices_2d = slices_2d.astype(np.float32)
-        slices_2d = (slices_2d - np.min(slices_2d)) / (np.max(slices_2d) - np.min(slices_2d) + 1e-8)
-
-        # 5. Nhân bản kênh màu (Replication) để tạo thành (256, 256, 3) cho ResNet50
+        # 5. Nhân bản 3 kênh màu (RGB ảo)
         slices_2d = np.stack((slices_2d,)*3, axis=-1) 
         
-        print(f"⚙️ Chạy inference cho {len(slices_2d)} lát cắt (Input shape: {slices_2d.shape})...")
+        print(f"⚙️ Chạy inference cho {len(slices_2d)} lát cắt (Đã Crop & Zoom)...")
 
-        # Chạy model
-        preds = model.predict(slices_2d, batch_size=16)
-    
+        # 6. Kích hoạt AI
+        preds = model.predict(slices_2d, batch_size=16)    
 
         # --- BƯỚC 3: TÔ MÀU VÀ LƯU FILE ---
         colored_results = []
