@@ -2,7 +2,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 
 # 1. Trỏ đến file .npy do AI VỪA TẠO RA
-ai_output_path = r"D:\medicalSystem\ServerBackend\src\mri_uploads\56578_BrainTumor_1782018044624.nii.npy"
+ai_output_path = r"D:\medicalSystem\ServerBackend\src\mri_uploads\008_flair_1782675659893_Segmented_Colored.npy"
 
 # 2. Đọc file
 ai_images = np.load(ai_output_path)

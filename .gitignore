@@ -1,2 +1,9 @@
+# Bỏ qua thư mục chứa thư viện
 node_modules/
 venv/
+.env
+
+# Bỏ qua ảnh và file MRI nặng
+ServerBackend/src/mri_uploads/
+*.npy
+*.npz

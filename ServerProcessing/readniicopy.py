@@ -2,7 +2,7 @@ import nibabel as nib
 import numpy as np
 import matplotlib.pyplot as plt
 
-file_path = "D:\\medicalSystem\\ServerBackend\\src\\mri_uploads\\565_BrainTumor_1781941410944.nii"
+file_path = "D:\\medicalSystem\\ServerBackend\\src\\mri_uploads\\BraTS20_Training_001_flair.nii"
 
 print("📦 Đang bóc hộp NIfTI...")
 nii_obj = nib.load(file_path)
@@ -11,8 +11,8 @@ volume_3d = nii_obj.get_fdata()
 print(f"✅ Kích thước khối 3D gốc: {volume_3d.shape}")
 # BraTS thường có shape (240, 240, 155). Mặt cắt ngang (Axial) chuẩn nhất nằm ở trục thứ 3 (size 155).
 
-# 1. LẤY MẶT CẮT NGANG (AXIAL) CHÍNH GIỮA ĐẦU
-slice_idx = volume_3d.shape[2] // 2 
+# 1. LẤY MẶT CẮT NGANG (AXIAL) CHÍNH GIỮA ĐẦUvolume_3d.shape[2] // 2 
+slice_idx = 60
 axial_slice = volume_3d[:, :, slice_idx]
 
 # 2. XOAY ẢNH LẠI CHO ĐÚNG CHIỀU (Mũi hướng lên trên)

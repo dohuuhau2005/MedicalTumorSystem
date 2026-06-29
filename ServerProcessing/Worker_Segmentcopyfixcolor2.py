@@ -59,7 +59,7 @@ class TransformerBlock(Layer):
         
         self.att = keras.layers.MultiHeadAttention(num_heads=num_heads, key_dim=embed_dim)
         self.ffn = keras.Sequential(
-            [keras.layers.Dense(ff_dim, activation="relu"), keras.layers.Dense(embed_dim),]
+            [keras.layers.Dense(ff_dim, activation="gelu"), keras.layers.Dense(embed_dim),]
         )
         self.layernorm1 = keras.layers.LayerNormalization(epsilon=1e-6)
         self.layernorm2 = keras.layers.LayerNormalization(epsilon=1e-6)
@@ -208,41 +208,45 @@ def sign_rsa_python(cipher_file, cipher_patient):
     return base64.b64encode(signature_bytes).decode('utf-8')
 
 # ==========================================
-# 4. HÀM TÔ MÀU VÀ BLEND ẢNH CHUẨN Y KHOA
+# 4. HÀM TÔ MÀU VÀ BLEND ẢNH CHUẨN Y KHOA (CHUẨN BRATS)
 # ==========================================
 def apply_color_mask(original_slice, wt_pred, tc_pred, et_pred):
-    # 1. Trích xuất kênh xám chuẩn
+    # 1. Trích xuất kênh xám (Vì original_slice là [256,256,3] từ Phòng 1 nhưng 3 kênh giống nhau)
     img_gray = original_slice[:, :, 0]
     
-    # 2. Gọt nhiễu tương phản 1% - 99%
+    # 2. Chuẩn hóa hiển thị MRI (Làm sáng não)
     p1, p99 = np.percentile(img_gray, (1, 99))
     img_clipped = np.clip(img_gray, p1, p99)
-    
     if p99 - p1 > 0:
         img_norm = (img_clipped - p1) / (p99 - p1)
     else:
         img_norm = img_clipped - p1
-        
     img_8u = (img_norm * 255).astype(np.uint8)
     
-    # 3. Tạo nền ảnh hệ BGR cho OpenCV trộn đồ họa
-    orig_bgr = np.stack([img_8u, img_8u, img_8u], axis=-1)
-    color_mask_bgr = np.zeros_like(orig_bgr)
+    # 3. Tạo nền RGB 
+    orig_rgb = np.stack([img_8u, img_8u, img_8u], axis=-1)
+    color_mask_rgb = np.zeros_like(orig_rgb)
 
-    wt_mask = (wt_pred > 0.5).astype(np.uint8)
-    tc_mask = (tc_pred > 0.5).astype(np.uint8)
-    et_mask = (et_pred > 0.5).astype(np.uint8)
+    # Lọc mask bằng Threshold (Siết chặt một chút để AI khỏi vẽ bậy ngoài sọ)
+    wt_mask = (wt_pred > 0.55).astype(np.uint8)
+    tc_mask = (tc_pred > 0.55).astype(np.uint8)
+    et_mask = (et_pred > 0.55).astype(np.uint8)
 
-    # Đổ màu theo đúng hệ BGR của OpenCV để trộn ảnh không bị lệch
-    color_mask_bgr[wt_mask == 1] = [0, 255, 0]   # Xanh lá (B=0, G=255, R=0)
-    color_mask_bgr[tc_mask == 1] = [0, 0, 255]   # Đỏ chuẩn BGR (B=0, G=0, R=255)
-    color_mask_bgr[et_mask == 1] = [0, 255, 255] # Vàng chuẩn BGR (B=0, G=255, R=255)
-
-    # Trộn ảnh đồ họa bằng OpenCV
-    blended_bgr = cv2.addWeighted(orig_bgr, 0.7, color_mask_bgr, 0.5, 0)
+   # 4. 🚨 THỨ TỰ TÔ MÀU SINH TỬ (Dùng hệ BGR thay vì RGB)
     
-    # 🚨 QUYẾT ĐỊNH CHÍ CHỐT: Đổi ngược mảng BGR thành RGB trước khi return để np.save lưu chuẩn xác!
-    blended_rgb = cv2.cvtColor(blended_bgr, cv2.COLOR_BGR2RGB)
+    # Lớp 1 (Rộng nhất): Phù nề (WT) -> MÀU XANH DƯƠNG 
+    color_mask_rgb[wt_mask == 1] = [255, 0, 0]   # BGR: [Blue=255, Green=0, Red=0]
+    
+    # Lớp 2 (Nằm giữa): Lõi u (TC) -> MÀU ĐỎ 
+    color_mask_rgb[tc_mask == 1] = [0, 0, 255]   # BGR: [Blue=0, Green=0, Red=255]
+    
+    # Lớp 3 (Trong cùng): Tăng quang (ET) -> MÀU VÀNG 
+    color_mask_rgb[et_mask == 1] = [0, 255, 255] # BGR: [Blue=0, Green=255, Red=255]
+
+    # Trộn ảnh bằng cv2 (Nhớ là hàm này không quan tâm RGB hay BGR, nó chỉ tính toán ma trận)
+    # Tăng độ đậm của u lên 0.6 cho rực rỡ
+    blended_rgb = cv2.addWeighted(orig_rgb, 0.7, color_mask_rgb, 0.6, 0)
+    
     return blended_rgb
 # 5. HÀM MAIN: HỨNG MESSAGE TỪ PHÒNG 1 VÀ XỬ LÝ
 # ==========================================
@@ -261,54 +265,21 @@ def process_rabbitmq_message(ch, method, properties, body):
         print(f"\n📥 [Phòng Segmentation] Nhận Job BN: {patient_id} | File npy: {npy_path}")
 
 # --- BƯỚC 2: CHẠY AI (CHUYÊN GIA PREPROCESS) ---
-        import nibabel as nib
-        
-        # 1. Đọc khối 3D
-        nii_img = nib.load(npy_path)
-        mri_data = nii_img.get_fdata()
-        
-        # 2. Chuẩn hóa Z-score toàn bộ khối não (Y hệt code cô giáo)
-        mask = mri_data > 0
-        if np.sum(mask) > 0:
-            mean_val = mri_data[mask].mean()
-            std_val = mri_data[mask].std()
-            mri_data = (mri_data - mean_val) / (std_val + 1e-8)
-            mri_data[~mask] = 0.0 # Ép viền ngoài về 0
-            
-        # 3. 🚨 BÍ QUYẾT: GỌT VIỀN ĐEN ĐỂ ZOOM NÃO TO LÊN (CROP ROI)
-        padding = 10
-        coords = np.where(mri_data > 0)
-        if len(coords[0]) > 0:
-            x_min, x_max = max(0, coords[0].min() - padding), min(mri_data.shape[0], coords[0].max() + padding)
-            y_min, y_max = max(0, coords[1].min() - padding), min(mri_data.shape[1], coords[1].max() + padding)
-            z_min, z_max = max(0, coords[2].min() - padding), min(mri_data.shape[2], coords[2].max() + padding)
-            cropped_mri = mri_data[x_min:x_max, y_min:y_max, z_min:z_max]
-        else:
-            cropped_mri = mri_data
-            
-    # 4. Thái lát 2D và Resize về chuẩn 256x256
-        resized_slices = []
-        for i in range(cropped_mri.shape[2]):
-            slice_2d = cropped_mri[:, :, i]
-            
-            if np.sum(slice_2d > 0) < 10: 
-                continue
-                
-            # 🚨 SỬA TẠI ĐÂY: Phải dựng thẳng cái não dậy trước khi Resize và Predict!
-            slice_2d = np.rot90(slice_2d, k=1)
-                
-            img_resized = cv2.resize(slice_2d, (256, 256), interpolation=cv2.INTER_LINEAR)
-            resized_slices.append(img_resized)
-            
-        slices_2d = np.array(resized_slices).astype(np.float32)
-        
-        # 5. Nhân bản 3 kênh màu (RGB ảo)
-        slices_2d = np.stack((slices_2d,)*3, axis=-1) 
-        
-        print(f"⚙️ Chạy inference cho {len(slices_2d)} lát cắt (Đã Crop & Zoom)...")
+    # --- BƯỚC 1: XÁC THỰC VÀ GIẢI MÃ ---
+        # ... (đoạn trên giữ nguyên)
+        print(f"\n📥 [Phòng Segmentation] Nhận Job BN: {patient_id} | File npy: {npy_path}")
 
-        # 6. Kích hoạt AI
+        # --- BƯỚC 2: CHẠY AI SEGMENTATION ---
+        # 🚨 FIX LỖI: File nhận được ĐÃ LÀ FILE NPY 2D TỪ PHÒNG 1. Chỉ cần np.load là ăn ngay!
+        slices_2d = np.load(npy_path)
+        
+        print(f"⚙️ Chạy inference cho {len(slices_2d)} lát cắt (Đã nhận từ Phòng Preprocess)...")
+
+        # Kích hoạt AI
         preds = model.predict(slices_2d, batch_size=16)    
+
+        # --- BƯỚC 3: TÔ MÀU VÀ LƯU FILE ---
+        # ... (đoạn dưới giữ nguyên) 
 
 # --- BƯỚC 3: TÔ MÀU VÀ LƯU FILE ---
         colored_results = []

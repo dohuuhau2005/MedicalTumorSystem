@@ -12,7 +12,8 @@ print(f"✅ Kích thước khối 3D gốc: {volume_3d.shape}")
 # BraTS thường có shape (240, 240, 155). Mặt cắt ngang (Axial) chuẩn nhất nằm ở trục thứ 3 (size 155).
 
 # 1. LẤY MẶT CẮT NGANG (AXIAL) CHÍNH GIỮA ĐẦU
-slice_idx = volume_3d.shape[2] // 2 
+#volume_3d.shape[2] // 2 
+slice_idx = 60
 axial_slice = volume_3d[:, :, slice_idx]
 
 # 2. XOAY ẢNH LẠI CHO ĐÚNG CHIỀU (Mũi hướng lên trên)
