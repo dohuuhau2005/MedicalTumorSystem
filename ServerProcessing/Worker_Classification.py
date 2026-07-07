@@ -67,6 +67,7 @@ mongo_uri = os.getenv('MONGO_URI', 'mongodb://localhost:27017/')
 mongo_client = MongoClient(mongo_uri)
 db = mongo_client["Patients"]
 medical_collection = db["medicalSystem"]
+history_collection = db["patientHistory"]
 
 # Danh sách nhãn bệnh
 CLASS_NAMES = {0: "Glioma", 1: "Meningioma", 2: "Pituitary"}
@@ -265,10 +266,9 @@ def process_rabbitmq_message(ch, method, properties, body):
         patient_id = decrypt_aes(data['ivPatient'], data['cipherPatient'])
         print(f"\n📥 [Phòng Classification] Nhận Job BN: {patient_id}")
         
-        # --- BƯỚC 2: CHUẨN BỊ 5 INPUTS CHO MÔ HÌNH ---
-        # YÊU CẦU: Phòng Segmentation phải lưu data dưới dạng np.savez(npz_path, orig=..., wt=..., tc=..., et=...)
+# --- BƯỚC 2: CHUẨN BỊ 5 INPUTS CHO MÔ HÌNH ---
         payload = np.load(npz_path)
-        orig_slices = payload['original'] # Đã trỏ đúng vào key chuẩn
+        orig_slices = payload['original'] 
         wt_preds = payload['wt']
         tc_preds = payload['tc']
         et_preds = payload['et']
@@ -276,35 +276,41 @@ def process_rabbitmq_message(ch, method, properties, body):
         Xg_list, Xl_list, Xtc_list, Xet_list, Sf_list = [], [], [], [], []
         
         for i in range(len(orig_slices)):
-            img_f = orig_slices[i].astype('float32')
-            wt, tc, et = wt_preds[i], tc_preds[i], et_preds[i]
+            img_orig = orig_slices[i].astype('float32') # (256, 256, 3)
+            wt_orig, tc_orig, et_orig = wt_preds[i], tc_preds[i], et_preds[i]
             
-            # Chuẩn bị ảnh Global (X_g)
-            img_g = cv2.resize(img_f, (224, 224))
-            img_g = preprocess_clahe(img_g)
-            img_g = normalize(img_g.astype('float32'))
-            Xg_list.append(img_g)
+            # 🚨 QUAN TRỌNG: Resize tất cả về 224x224 và áp dụng CLAHE làm ảnh gốc (giống hệt Colab)
+            img_224 = cv2.resize(img_orig, (224, 224))
+            img_clahe = preprocess_clahe(img_224).astype('float32') # Đây là 'img_f' của Colab
+            
+            wt = cv2.resize(wt_orig.astype('float32'), (224, 224), interpolation=cv2.INTER_NEAREST)
+            tc = cv2.resize(tc_orig.astype('float32'), (224, 224), interpolation=cv2.INTER_NEAREST)
+            et = cv2.resize(et_orig.astype('float32'), (224, 224), interpolation=cv2.INTER_NEAREST)
+            
+            # Chuẩn bị ảnh Global (X_g) - Dùng thẳng ảnh CLAHE (0-255), KHÔNG NORMALIZE
+            Xg_list.append(img_clahe)
             
             # Chuẩn bị ảnh Local (X_l) và các Mask (X_tc, X_et)
-            bbox = _wt_bbox(wt, 25, img_f.shape)
+            bbox = _wt_bbox(wt, 25, img_clahe.shape)
             if bbox is None:
-                xl = cv2.resize(img_f, (224, 224))
+                xl = cv2.resize(img_clahe, (224, 224))
                 tc_c = np.zeros((224, 224), 'float32')
                 et_c = np.zeros((224, 224), 'float32')
             else:
                 y0, y1, x0, x1 = bbox
-                xl = cv2.resize(img_f[y0:y1, x0:x1], (224, 224))
-                tc_c = cv2.resize(tc[y0:y1, x0:x1].astype('float32'), (224, 224), interpolation=cv2.INTER_NEAREST)
-                et_c = cv2.resize(et[y0:y1, x0:x1].astype('float32'), (224, 224), interpolation=cv2.INTER_NEAREST)
+                # Cắt từ ảnh img_clahe
+                xl = cv2.resize(img_clahe[y0:y1, x0:x1], (224, 224))
+                tc_c = cv2.resize(tc[y0:y1, x0:x1], (224, 224), interpolation=cv2.INTER_NEAREST)
+                et_c = cv2.resize(et[y0:y1, x0:x1], (224, 224), interpolation=cv2.INTER_NEAREST)
                 
-            Xl_list.append(normalize(xl.astype('float32')))
+            Xl_list.append(xl) # KHÔNG NORMALIZE
             Xtc_list.append(np.stack([(tc_c>0.5).astype('float32')*255.]*3, -1))
             Xet_list.append(np.stack([(et_c>0.5).astype('float32')*255.]*3, -1))
             
-            # Trích xuất 11 features hình học
-            Sf_list.append(compute_seg_features(wt, tc, et, img_f.shape, image=img_f))
+            # Trích xuất 11 features hình học từ mặt nạ 224 và ảnh CLAHE
+            Sf_list.append(compute_seg_features(wt, tc, et, img_clahe.shape, image=img_clahe))
 
-        # Chuyển đổi sang tensor/numpy array chuẩn
+        # Chuyển đổi sang numpy array chuẩn
         Xg = np.array(Xg_list, dtype='float32')
         Xl = np.array(Xl_list, dtype='float32')
         Xtc = np.array(Xtc_list, dtype='float32')
@@ -368,12 +374,43 @@ def process_rabbitmq_message(ch, method, properties, body):
                 "confidence": round(confidence, 2)
             }}
         )
+        file_name_only = os.path.basename(npz_path) 
+        
+        history_collection.insert_one({
+            "idpatient": patient_id,
+            "timestamp": time_now, # Lưu time_now để sau này query sắp xếp (sort) cho dễ
+            "result_file_name": file_name_only, # Vd: 021_flair_1783408229996_2D_ready_Segmented_Ready.npz
+            "diagnosis": best_class_name,
+            "confidence": round(confidence, 2)
+        })
+        
+        print("💾 Đã lưu kết quả vĩnh viễn vào Lịch sử (patientHistory)")
         print("💾 Đã update MongoDB (Status 3: Phân loại xong)")
         ch.basic_ack(delivery_tag=method.delivery_tag)
         print("✅✅ ĐÃ HOÀN THÀNH TOÀN BỘ QUY TRÌNH!\n")
 
     except Exception as e:
         print(f"❌ Lỗi Pipeline Classification: {str(e)}")
+        
+        # 1. Báo cáo lỗi vào database để Frontend (React) biết đường dừng Loading
+        try:
+            # Lưu ý: Cần khai báo 'patient_id' ở đầu hàm (ngay sau khi giải mã) 
+            # để dùng được ở đây trong trường hợp lỗi xảy ra sau khi đã giải mã.
+            if 'patient_id' in locals():
+                time_now = int(time.time() * 1000)
+                medical_collection.update_one(
+                    {"idpatient": patient_id},
+                    {"$set": {
+                        "status": -1,  # -1 Tượng trưng cho lỗi AI
+                        "time": time_now,
+                        "diagnosis": "Lỗi xử lý hệ thống AI"
+                    }}
+                )
+                print(f"💾 Đã cập nhật MongoDB (Status -1) cho bệnh nhân {patient_id}")
+        except Exception as db_err:
+            print(f"⚠️ Lỗi khi cập nhật DB báo lỗi: {db_err}")
+
+        # 2. Hủy bỏ bức thư "độc" này để không làm nghẽn hệ thống
         ch.basic_nack(delivery_tag=method.delivery_tag, requeue=False)
 
 # ==========================================

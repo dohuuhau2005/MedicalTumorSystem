@@ -166,7 +166,7 @@ if __name__ == "__main__":
     # Đường dẫn file
     SEG_MODEL_PATH = r"D:\AIModel\unet_wt_tc_et_best.keras"
     CLS_MODEL_PATH = r"D:\AIModel\fold_1_best.keras"
-    IMAGE_PATH = r"D:\medicalSystem\ServerBackend\src\mri_uploads\brisc2025_train_01152_me_ax_t1.jpg"
+    IMAGE_PATH = r"D:\medicalSystem\ServerBackend\src\mri_uploads\brisc2025_train_03544_pi_ax_t1.jpg"
 
     # Load 2 Models
     model_seg = load_seg_model(SEG_MODEL_PATH)
@@ -194,29 +194,37 @@ if __name__ == "__main__":
     print(f"  -> Đã tìm thấy u! Kích thước WT: {np.sum(wt_mask)} pixels.")
 
     print("\n[3/3] CHẠY CLASSIFICATION (Phòng 3)...")
-    # Fix triệt để lỗi ép kiểu: Truyền ảnh uint8 gốc vào CLAHE
-    img_g_clahe = preprocess_clahe(img_3c_uint8)
-    img_g_clahe_224 = cv2.resize(img_g_clahe, (224, 224))
-    Xg = np.expand_dims(normalize(img_g_clahe_224.astype('float32')), axis=0)
+    
+    # 1. Resize ảnh gốc về 224x224 và chạy CLAHE ngay lập tức (CHUẨN COLAB)
+    img_224 = cv2.resize(img_3c_uint8, (224, 224))
+    img_clahe = preprocess_clahe(img_224).astype('float32') # Dùng ảnh này làm gốc cho mọi thứ
+    
+    # 2. Resize các Mask từ Segmentation về 224x224
+    wt = cv2.resize(wt_mask, (224, 224), interpolation=cv2.INTER_NEAREST)
+    tc = cv2.resize(tc_mask, (224, 224), interpolation=cv2.INTER_NEAREST)
+    et = cv2.resize(et_mask, (224, 224), interpolation=cv2.INTER_NEAREST)
 
-    # Xử lý Local Crop (Xl) và Mask từ ảnh Float32 đã normalize
-    bbox = _wt_bbox(wt_mask, 25, img_3c_norm.shape)
+    # 3. Chuẩn bị Global (Xg) - TUYỆT ĐỐI KHÔNG NORMALIZE
+    Xg = np.expand_dims(img_clahe, axis=0)
+
+    # 4. Chuẩn bị Local (Xl) và Mask Crop - Cắt từ ảnh CLAHE 224
+    bbox = _wt_bbox(wt, 25, img_clahe.shape)
     if bbox:
         y0, y1, x0, x1 = bbox
-        xl = cv2.resize(img_3c_norm[y0:y1, x0:x1], (224, 224))
-        tc_c = cv2.resize(tc_mask[y0:y1, x0:x1], (224, 224), interpolation=cv2.INTER_NEAREST)
-        et_c = cv2.resize(et_mask[y0:y1, x0:x1], (224, 224), interpolation=cv2.INTER_NEAREST)
+        xl = cv2.resize(img_clahe[y0:y1, x0:x1], (224, 224))
+        tc_c = cv2.resize(tc[y0:y1, x0:x1], (224, 224), interpolation=cv2.INTER_NEAREST)
+        et_c = cv2.resize(et[y0:y1, x0:x1], (224, 224), interpolation=cv2.INTER_NEAREST)
     else:
-        xl = cv2.resize(img_3c_norm, (224, 224))
+        xl = cv2.resize(img_clahe, (224, 224))
         tc_c = np.zeros((224, 224), 'float32')
         et_c = np.zeros((224, 224), 'float32')
         
-    Xl = np.expand_dims(normalize(xl.astype('float32')), axis=0)
+    Xl = np.expand_dims(xl, axis=0) # TUYỆT ĐỐI KHÔNG NORMALIZE
     Xtc = np.expand_dims(np.stack([(tc_c>0.5).astype('float32')*255.]*3, -1), axis=0)
     Xet = np.expand_dims(np.stack([(et_c>0.5).astype('float32')*255.]*3, -1), axis=0)
     
-    # Feature Extraction (Sf)
-    Sf = np.expand_dims(compute_seg_features(wt_mask, tc_mask, et_mask, img_3c_norm.shape, image=img_3c_norm), axis=0)
+    # 5. Feature Extraction (Sf) - Trích xuất từ ảnh CLAHE 224 và Mask 224
+    Sf = np.expand_dims(compute_seg_features(wt, tc, et, img_clahe.shape, image=img_clahe), axis=0)
 
     print("  -> Bơm 5 tensor dữ liệu vào mô hình ConvNeXt...")
     preds_cls = model_cls.predict([Xg, Xl, Xtc, Xet, Sf], verbose=0)

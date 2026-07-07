@@ -28,7 +28,7 @@ app.use(express.json())
 
 app.use("/file", require("./src/APIs/uploadRoute2"))
 app.use("/patients", require("./src/APIs/patients"))
-app.use("/results", require("./src/APIs/results"))
+app.use("/results", require("./src/APIs/history"))
 
 
 

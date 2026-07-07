@@ -20,7 +20,7 @@ export default function Home() {
 
                     <Link to="/upload">Upload</Link>
 
-                    <Link to="/result">Result</Link>
+
 
                     <Link to="/about">About</Link>
                     <Link to="/history">History</Link>

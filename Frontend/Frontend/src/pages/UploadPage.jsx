@@ -37,7 +37,11 @@ const UploadPage = () => {
                 const status = patientData.status;
 
                 setCurrentStatus(status);
-
+                if (status === -1) {
+                    clearInterval(pollingInterval.current);
+                    setIsLoading(false);
+                    setError("Hệ thống AI gặp sự cố khi xử lý file của bệnh nhân này. Vui lòng kiểm tra lại file MRI.");
+                }
                 // Nếu status = 3 (Hoàn tất phân loại và phân vùng)
                 if (status === 3) {
                     // 1. Dừng Polling
@@ -57,9 +61,9 @@ const UploadPage = () => {
                         try {
                             // Dùng Promise.all để gọi 3 API cùng lúc, tiết kiệm thời gian chờ
                             const [wtRes, tcRes, etRes] = await Promise.all([
-                                axios.get(`http://192.168.1.4:9004/results/image?filename=${fileName}&key=wt`),
-                                axios.get(`http://192.168.1.4:9004/results/image?filename=${fileName}&key=tc`),
-                                axios.get(`http://192.168.1.4:9004/results/image?filename=${fileName}&key=et`)
+                                axios.get(`http://127.0.0.1:9004/results/image?filename=${fileName}&key=wt`),
+                                axios.get(`http://127.0.0.1:9004/results/image?filename=${fileName}&key=tc`),
+                                axios.get(`http://127.0.0.1:9004/results/image?filename=${fileName}&key=et`)
                             ]);
 
                             // Gán Base64 vào biến
@@ -76,6 +80,7 @@ const UploadPage = () => {
 
                     // 3. Cập nhật state result để hiển thị lên UI
                     setResult({
+                        rawConfidence: patientData.confidence, // <-- BỔ SUNG ĐỂ XỬ LÝ LOGIC
                         accuracy: patientData.confidence ? `${patientData.confidence}%` : "Chưa xác định",
                         diagnosis: patientData.diagnosis || "Đang cập nhật...",
                         fileName: fileName,
@@ -144,7 +149,7 @@ const UploadPage = () => {
                 <div className="nav-links">
                     <a href="/">Home</a>
                     <a href="/upload" className="active">Upload</a>
-                    <a href="/result">Result</a>
+
                     <a href="/about">About</a>
                     <a href="/history">History</a>
                 </div>
@@ -228,6 +233,22 @@ const UploadPage = () => {
                             <h4 style={{ marginTop: '10px', color: 'var(--text2)' }}>
                                 Độ chính xác (Confidence): <span style={{ color: '#00ffcc' }}>{result.accuracy}</span>
                             </h4>
+
+                            {/* --- BỔ SUNG CẢNH BÁO NẾU DƯỚI 60% --- */}
+                            {result.rawConfidence && result.rawConfidence < 60 && (
+                                <div style={{
+                                    marginTop: '15px',
+                                    padding: '12px',
+                                    border: '1px solid #ff4d4d',
+                                    borderRadius: '8px',
+                                    backgroundColor: 'rgba(255, 77, 77, 0.15)',
+                                    color: '#ff4d4d',
+                                    fontWeight: 'bold',
+                                    display: 'inline-block'
+                                }}>
+                                    ⚠️ CẢNH BÁO: Độ tin cậy thấp. Yêu cầu hội chẩn chuyên gia y tế!
+                                </div>
+                            )}
                         </div>
 
                         <div className="segmentation-grid">

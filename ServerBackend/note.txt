@@ -8,3 +8,5 @@ id => mgongle
 
 khi mà gửi sang python server nó sẽ nhận 1 biến id lưu xong thì cập nhật lên mgongle
 
+
+sau khi có list file từ id bệnh nhân thì nhấn vào lấy tên file xài lại API kia lấy lại file thôi

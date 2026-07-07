@@ -362,6 +362,25 @@ def process_rabbitmq_message(ch, method, properties, body):
 
     except Exception as e:
         print(f"❌ Lỗi Pipeline Segmentation: {str(e)}")
+        
+        # 1. Báo cáo lỗi vào database để Frontend (React) biết đường dừng Loading
+        try:
+            # Kiểm tra xem biến patient_id đã được tạo thành công chưa
+            if 'patient_id' in locals():
+                time_now = int(time.time() * 1000)
+                medical_collection.update_one(
+                    {"idpatient": patient_id},
+                    {"$set": {
+                        "status": -1,  # -1 Tượng trưng cho lỗi AI
+                        "time": time_now,
+                        "diagnosis": "Lỗi xử lý hệ thống AI (Phòng Segmentation)"
+                    }}
+                )
+                print(f"💾 Đã cập nhật MongoDB (Status -1) báo lỗi cho bệnh nhân {patient_id}")
+        except Exception as db_err:
+            print(f"⚠️ Lỗi khi cập nhật DB báo lỗi: {db_err}")
+
+        # 2. Hủy bỏ bức thư để tránh vòng lặp lỗi vô hạn
         ch.basic_nack(delivery_tag=method.delivery_tag, requeue=False)
 
 # ==========================================

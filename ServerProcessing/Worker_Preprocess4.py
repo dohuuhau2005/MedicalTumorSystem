@@ -131,10 +131,13 @@ def process_3_channels(flair, t1ce, t2, padding=10, size=256):
     images = []
     # Quét qua từng lát cắt (trục Z)
     for i in range(c_flair.shape[2]):
-        sl_flair = np.rot90(c_flair[:, :, i], k=1)
-        sl_t1ce = np.rot90(c_t1ce[:, :, i], k=1)
-        sl_t2 = np.rot90(c_t2[:, :, i], k=1)
-        
+        # không cần xoay nữa vì khác trong pipeline Colab, đã chuẩn hóa từ đầu
+        # sl_flair = np.rot90(c_flair[:, :, i], k=1)
+        # sl_t1ce = np.rot90(c_t1ce[:, :, i], k=1)
+        # sl_t2 = np.rot90(c_t2[:, :, i], k=1)
+        sl_flair = c_flair[:, :, i]
+        sl_t1ce = c_t1ce[:, :, i]
+        sl_t2 = c_t2[:, :, i]
         # Lọc nhiễu sọ đen
         if np.sum(sl_flair > 0) < 10: continue
         
@@ -145,7 +148,7 @@ def process_3_channels(flair, t1ce, t2, padding=10, size=256):
         
         # 🚨 BÍ QUYẾT TẠO ẢNH ĐA KÊNH: Chập 3 ma trận lại làm 1 
         # (Thứ tự chuẩn của Colab: FLAIR, T1ce, T2)
-        img_3c = np.stack([sl_flair, sl_t1ce, sl_t2], axis=-1)
+        img_3c = np.stack([sl_flair, sl_t2, sl_t1ce], axis=-1)
         images.append(img_3c.astype(np.float32))
         
     return np.array(images)
@@ -227,7 +230,26 @@ def process_rabbitmq_message(ch, method, properties, body):
         print("============================================\n")
 
     except Exception as e:
-        print(f"❌ Lỗi Pipeline: {str(e)}")
+        print(f"❌ Lỗi Pipeline Segmentation: {str(e)}")
+        
+        # 1. Báo cáo lỗi vào database để Frontend (React) biết đường dừng Loading
+        try:
+            # Kiểm tra xem biến patient_id đã được tạo thành công chưa
+            if 'patient_id' in locals():
+                time_now = int(time.time() * 1000)
+                medical_collection.update_one(
+                    {"idpatient": patient_id},
+                    {"$set": {
+                        "status": -1,  # -1 Tượng trưng cho lỗi AI
+                        "time": time_now,
+                        "diagnosis": "Lỗi xử lý hệ thống AI (Phòng Segmentation)"
+                    }}
+                )
+                print(f"💾 Đã cập nhật MongoDB (Status -1) báo lỗi cho bệnh nhân {patient_id}")
+        except Exception as db_err:
+            print(f"⚠️ Lỗi khi cập nhật DB báo lỗi: {db_err}")
+
+        # 2. Hủy bỏ bức thư để tránh vòng lặp lỗi vô hạn
         ch.basic_nack(delivery_tag=method.delivery_tag, requeue=False)
 
 def start_worker():
