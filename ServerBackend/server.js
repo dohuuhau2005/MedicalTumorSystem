@@ -6,7 +6,7 @@ const app = express();
 const corsOptions = {
     origin: function (origin, callback) {
         // Cho phép các request không có origin (như Postman) hoặc từ localhost:3000
-        const allowedOrigins = ['http://localhost:3000', 'http://192.168.1.10:3000', 'http://192.168.195.89:3000', 'http://127.0.0.1:3000', 'http://localhost:5173'];
+        const allowedOrigins = ['http://localhost:3000', 'http://192.168.1.10:3000', 'http://192.168.195.89:3000', 'http://127.0.0.1:3000', 'http://localhost:5175'];
         if (!origin || allowedOrigins.indexOf(origin) !== -1) {
             callback(null, true);
         } else {
