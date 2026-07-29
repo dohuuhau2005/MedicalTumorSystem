@@ -41,6 +41,12 @@ const UploadPage = () => {
                     clearInterval(pollingInterval.current);
                     setIsLoading(false);
                     setError("Hệ thống AI gặp sự cố khi xử lý file của bệnh nhân này. Vui lòng kiểm tra lại file MRI.");
+                    try {
+                        await axios.delete(`http://localhost:9999/patients/${patientId}`);
+                    } catch (delErr) {
+                        console.error("Lỗi khi dọn dẹp dữ liệu tạm:", delErr);
+                    }
+                    localStorage.removeItem('active_patient_id');
                 }
                 // Nếu status = 3 (Hoàn tất phân loại và phân vùng)
                 if (status === 3) {
@@ -88,6 +94,12 @@ const UploadPage = () => {
                         tc: imgTC,
                         et: imgET
                     });
+                    try {
+                        await axios.delete(`http://localhost:9999/patients/${patientId}`);
+                        console.log(`Đã dọn dẹp thành công dữ liệu tạm của bệnh nhân ${patientId}`);
+                    } catch (delErr) {
+                        console.error("Lỗi khi dọn dẹp dữ liệu tạm:", delErr);
+                    }
 
                     // 4. Dọn dẹp localStorage
                     localStorage.removeItem('active_patient_id');

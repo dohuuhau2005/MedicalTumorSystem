@@ -2,7 +2,7 @@ import nibabel as nib
 import numpy as np
 import matplotlib.pyplot as plt
 
-file_path = "D:\\medicalSystem\\ServerBackend\\src\\mri_uploads\\BraTS20_Training_001_seg.nii"
+file_path = "D:\\medicalSystem\\ServerBackend\\src\\mri_uploads\\BraTS20_Training_001_flair.nii"
 
 print("📦 Đang bóc hộp NIfTI...")
 nii_obj = nib.load(file_path)
