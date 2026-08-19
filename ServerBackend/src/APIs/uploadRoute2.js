@@ -113,7 +113,11 @@ router.post(
             const patientDataMongo = {
                 idpatient,
                 status: 0,
+                time_start: req.uploadTime,
                 time: req.uploadTime,
+                time_prep: 0,
+                time_seg: 0,
+                time_cls: 0,
                 files: filenames,
                 paths: paths
             };

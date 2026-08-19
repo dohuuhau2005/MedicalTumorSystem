@@ -243,7 +243,7 @@ const UploadPage = () => {
                         <div className="classification-box">
                             <h3>Chẩn đoán: <span className="text-accent">{result.diagnosis}</span></h3>
                             <h4 style={{ marginTop: '10px', color: 'var(--text2)' }}>
-                                Độ chính xác (Confidence): <span style={{ color: '#00ffcc' }}>{result.accuracy}</span>
+                                Độ Tin Cậy (Confidence): <span style={{ color: '#00ffcc' }}>{result.accuracy}</span>
                             </h4>
 
                             {/* --- BỔ SUNG CẢNH BÁO NẾU DƯỚI 60% --- */}

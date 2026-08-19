@@ -199,7 +199,7 @@ def process_rabbitmq_message(ch, method, properties, body):
         time_now = int(time.time() * 1000)
         medical_collection.update_one(
             {"idpatient": patient_id},
-            {"$set": {"status": 1, "time": time_now}}
+            {"$set": {"status": 1, "time_prep": time_now, "time": time_now}}
         )
         print("💾 Đã update MongoDB (Status 1: Tiền xử lý xong)")
 
