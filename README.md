@@ -135,12 +135,4 @@ python Worker_Classification.py       # Port 9003
 
 ---
 
-## 👥 Authors & Academic Credits
-
-- **Cao Thien Bao** (Student ID: 23DH114212)
-- **Do Huu Hau** (Student ID: 23DH114301)
-- **Supervising Instructor:** M.Sc. Le Hong Thuy Vu
-- **Department:** Faculty of Information Technology, Ho Chi Minh City University of Foreign Languages – Information Technology (HUFLIT)
-
----
 *Built with ❤️ for the Graduation Thesis at HUFLIT.*
