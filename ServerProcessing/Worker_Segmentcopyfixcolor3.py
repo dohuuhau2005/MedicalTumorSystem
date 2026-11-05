@@ -323,6 +323,7 @@ def process_rabbitmq_message(ch, method, properties, body):
             {"idpatient": patient_id},
             {"$set": {
                 "status": 2, 
+                "time_seg": time_now,
                 "time": time_now,
                 "result_file": result_path 
             }}

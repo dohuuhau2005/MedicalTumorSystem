@@ -27,8 +27,8 @@ def read_and_visualize_npz(file_path, slice_idx=None):
     # 2. Chọn lát cắt để hiển thị
     # Nếu không truyền slice_idx, mặc định sẽ lấy lát cắt ở giữa (thường chứa u rõ nhất)
     if slice_idx is None:
-        slice_idx = total_slices // 2
-        
+        slice_idx = 82
+        # total_slices // 2
     if slice_idx >= total_slices or slice_idx < 0:
         print(f"⚠️ Lát cắt {slice_idx} không hợp lệ. Vui lòng chọn từ 0 đến {total_slices - 1}.")
         return
@@ -83,7 +83,7 @@ def read_and_visualize_npz(file_path, slice_idx=None):
 # ==========================================
 if __name__ == "__main__":
     # Thay đường dẫn này bằng đường dẫn tới file .npz thực tế của bạn
-    sample_npz_path = r"D:\medicalSystem\ServerBackend\src\mri_uploads\024_flair_1783431439023_2D_ready_Segmented_Ready.npz" 
+    sample_npz_path = r"D:\medicalSystem\ServerBackend\src\mri_uploads\050_flair_1787045014184_2D_ready_Segmented_Ready.npz" 
     
     # Xem lát cắt ở giữa
     read_and_visualize_npz(sample_npz_path)
