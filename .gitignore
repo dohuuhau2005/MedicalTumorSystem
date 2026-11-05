@@ -7,3 +7,4 @@ venv/
 ServerBackend/src/mri_uploads/
 *.npy
 *.npz
+ServerProcessing/oldVersion/Danh_Sach_Lat_Cat_MRI/*
